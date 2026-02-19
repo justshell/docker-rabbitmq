@@ -1,0 +1,6 @@
+{% if rabbitmq.instances[item].erlang_cookie is defined and rabbitmq.instances[item].erlang_cookie != '' %}
+{{ rabbitmq.instances[item].erlang_cookie }}
+{% else %}
+{% set coockie = lookup('community.general.random_string', special=false, length=16) %}
+{{ coockie }}
+{% endif %}

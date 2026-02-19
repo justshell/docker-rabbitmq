@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+{% set instance_configuration = rabbitmq.instances[item].configuration %}
+management.tcp.ip = 0.0.0.0
+vm_memory_high_watermark.relative = {{ instance_configuration.vm_memory_high_watermark_relative | default('0.95') }}
+{% if all_instance_data.standalone == False %}
+## Cluster INFO
+cluster_name = {{ all_instance_data.cluster_name }}
+cluster_formation.peer_discovery_backend = classic_config
+{% for member in all_instance_data.members %}
+cluster_formation.classic_config.nodes.{{ loop.index }} = {{ member }}
+{% endfor %}
+## End Cluster INFO
+{% endif %}
+{% if instance_configuration.custom is defined %}
+{% for line in instance_configuration.custom %}
+{{ line }}
+{% endfor %}
+{% endif %}

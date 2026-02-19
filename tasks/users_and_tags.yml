@@ -1,0 +1,33 @@
+- name: check if user credentials are valid
+  community.docker.docker_container_exec:
+    container: "{{ container_info.name }}"
+    command: 'rabbitmqctl authenticate_user "{{ rmq_user.user }}" "{{ rmq_user.password }}"'
+  ignore_errors: true
+  register: user_ok
+
+- name: delete user if authentication failed
+  community.docker.docker_container_exec:
+    container: "{{ container_info.name }}"
+    command: 'rabbitmqctl delete_user "{{ item.user }}"'
+  ignore_error: "{{ ansible_check_mode }}"
+  when: user_ok.rc > 0
+
+- name: create user if authentication failed
+  community.docker.docker_container_exec:
+    container: "{{ container_info.name }}"
+    command: 'rabbitmqctl add_user "{{ rmq_user.user }}" "{{ rmq_user.password }}"'
+  ignore_errors: "{{ ansible_check_mode }}"
+  when: user_ok.rc > 0
+
+- name: set permission on users
+  community.docker.docker_container_exec:
+    container: "{{ container_info.name }}"
+    command: 'rabbitmqctl set_permissions -p "{{ rmq_user.vhost }}" "{{ rmq_user.user }}" ".*" ".*" ".*"'
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: set tags on user
+  community.docker.docker_container_exec:
+    container: "{{ container_info.name }}"
+    command: 'rabbitmqctl set_user_tags "{{ rmq_user.user }}" ""{{ rmq_user.tags }}'
+  when: "rmq_user.tags is defined"
+  ignore_errors: "{{ ansible_check_mode }}"

@@ -1,0 +1,8 @@
+- name: init instances
+  include_tasks: configure.yml
+  vars:
+    instance_name: "{{ item }}"
+    all_instance_data: "{{ rabbitmq.instances[item] }}"
+    container_info: "{{ rabbitmq.instances[item].docker_container }}"
+  loop: "{{ rabbitmq.instances.keys() }}"
+

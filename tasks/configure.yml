@@ -1,0 +1,87 @@
+- name: set default vars
+  set_fact:
+    need_restart_to_verify: False
+
+- name: create data directories
+  ansible.builtin.file:
+    path: "{{ all_instance_data.data_path }}"
+    state: directory
+    mode: '0755'
+
+- name: "setup templates for '{{ instance_name }}'"
+  ansible.builtin.template:
+    src: "{{ all_instance_data.templates_path|default('.')}}/{{ template.src }}"
+    dest: "{{ all_instance_data.data_path|default('.') }}/{{ template.dest }}"
+    owner: 'root'
+    group: 'root'
+    mode: "{{ template.mode }}"
+    force: "{{ template.override }}"
+  loop: 
+    - src: 'rabbitmq.conf.j2'
+      dest: 'rabbitmq.conf'
+      mode: '0644'
+      override: True
+    - src: 'erlang.cookie.j2'
+      dest: 'erlang.cookie'
+      mode: '0600'
+      override: "{{ rabbitmq.override_coockies }}"
+  loop_control:
+    loop_var: 'template'
+  register: 'templates_changes'
+
+- name: check is any changed on templates (internal logic task)
+  set_fact:
+    need_restart_to_verify: "True"
+  loop: "{{ templates_changes.results }}"
+  loop_control:
+    loop_var: "check_res"
+  no_log: "{{ not rabbitmq.debug }}"
+  when:
+    - check_res.changed
+
+- name: "start a rabbitmq for '{{ instance_name }}'"
+  community.docker.docker_container:
+    name: "{{ container_info.name }}"
+    hostname: "{{ container_info.hostname }}"
+    image: "{{ container_info.image }}"
+    state: started
+    restart_policy: always
+    restart: "{{ need_restart_to_verify }}"
+    volumes:
+      - "{{ all_instance_data.data_path }}/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf"
+      - "{{ all_instance_data.data_path }}/erlang.cookie:/var/lib/rabbitmq/.erlang.cookie"
+      - "{{ all_instance_data.data_path }}/data:/var/lib/rabbitmq"
+    ports: "{{ container_info.ports if (container_info.ports!=[]) else
+          rabbitmq.defaults.standalone_ports if all_instance_data.standalone else rabbitmq.defaults.cluster_ports
+      }}"
+    env: "{{ container_info.env if container_info.env!={} else {'RABBITMQ_USE_LONGNAME':(not all_instance_data.standalone)|string} }}"
+
+- name: "remove guest user for '{{ instance_name }}'"
+  community.docker.docker_container_exec:
+    container: "{{ container_info.name }}"
+    command: rabbitmqctl delete_user 'guest'
+  when:
+    - all_instance_data.users!=[]
+
+- name: "enable plugins for '{{ instance_name }}'"
+  community.docker.docker_container_exec:
+    container: "{{ container_info.name }}"
+    command: "rabbitmq-plugins enable {{ enable_plugin }}"
+  loop: "{{ all_instance_data.plugins }}"
+  loop_control:
+    loop_var: 'enable_plugin'
+
+- name: "create vhosts for '{{ instance_name }}'"
+  community.docker.docker_container_exec:
+    container: "{{ all_instance_data.docker_container.name }}"
+    command: "rabbitmqctl add_vhost {{ rmq_user.vhost }}"
+  loop: "{{ all_instance_data.users }}"
+  loop_control:
+    loop_var: "rmq_user"
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: "verify users and tags for '{{ instance_name }}'"
+  include_tasks: "users_and_tags.yml"
+  loop: "{{ all_instance_data.users }}"
+  loop_control:
+    loop_var: "rmq_user"

@@ -1,0 +1,20 @@
+rabbitmq:
+  override_coockies: False
+  debug: False
+  instances:
+    instance1:
+      docker_container:
+        name: 'RabbitMQ-1'
+        image: 'rabbitmq:3.12.14-management'
+        hostname: "RabbitMQ-1"
+        ports: []
+        env: {}
+      templates_path: '.'
+      cluster_name: 'rmq1'
+      standalone: True
+      data_path: '/opt/rabbitmq'
+      cluster_members: []
+      users: []
+      plugins:
+        - rabbitmq_management
+      configuration: []
